@@ -1,0 +1,10 @@
+{
+  "name": "arch-skills",
+  "version": "0.1.0",
+  "description": "Skills for documenting and reviewing software architecture: per-service system-context maps, interface tables and verified risk reviews as a self-contained HTML page.",
+  "author": { "name": "Gustavo Garcia", "url": "https://github.com/ggarber" },
+  "homepage": "https://github.com/ggarber/arch-skills",
+  "repository": "https://github.com/ggarber/arch-skills",
+  "license": "MIT",
+  "keywords": ["architecture", "documentation", "risk-review", "diagrams", "skills"]
+}

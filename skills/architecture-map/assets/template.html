@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Architecture Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky service picker, then one generated system-context diagram + reference tables per service */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5d6676; --line: #d5dae2; --chip: #eceff4;
+  --in: #2f6fd0; --evt: #b7791f; --out: #13877a; --store: #7a55c7; --core: #1b2230; --warn: #b4442f;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #1a2029; --fg: #e4e8ef; --muted: #98a2b3; --line: #2c3440; --chip: #222a35;
+  --in: #6aa1f0; --evt: #e0a64a; --out: #45c2b1; --store: #a98bec; --core: #e4e8ef; --warn: #ef8a74; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e4e8ef; --muted: #98a2b3; --line: #2c3440; --chip: #222a35;
+  --in: #6aa1f0; --evt: #e0a64a; --out: #45c2b1; --store: #a98bec; --core: #e4e8ef; --warn: #ef8a74; color-scheme: dark }
+
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.picker { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.picker .wrap { padding-block: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.brand { font-weight: 600; font-size: 0.95rem; margin-right: 4px; }
+nav.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+nav.chips a { font-family: var(--font-mono); font-size: 0.8rem; text-decoration: none; color: var(--fg); background: var(--chip);
+  padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; }
+nav.chips a:hover { border-color: var(--line); }
+nav.chips a:focus-visible, select:focus-visible { outline: 2px solid var(--in); outline-offset: 2px; }
+nav.chips a[aria-current="page"] { background: var(--fg); color: var(--bg); }
+nav.chips a.pending { color: var(--muted); }
+#svc-select { display: none; font: inherit; font-family: var(--font-mono); font-size: 0.85rem; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); max-width: 100%; }
+@media (max-width: 720px) { nav.chips { display: none; } #svc-select { display: block; flex: 1; } }
+
+main.wrap { padding-block: 24px 64px; display: grid; gap: 26px; }
+header.svc { display: grid; gap: 6px; }
+h1 { font-size: 1.6rem; font-weight: 600; margin: 0; text-wrap: balance; font-family: var(--font-mono); }
+h1 small { font-family: var(--font-body); font-size: 0.95rem; color: var(--muted); font-weight: 400; margin-left: 8px; }
+h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 10px; }
+header.svc p { margin: 0; color: var(--muted); max-width: 80ch; }
+code, .mono { font-family: var(--font-mono); font-size: 0.85em; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; display: inline-block; }
+
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.diagram svg { display: block; min-width: 1100px; width: 100%; height: auto; }
+svg .box { fill: var(--surface); stroke-width: 1.5; }
+svg .k-in { stroke: var(--in); } svg .k-evt { stroke: var(--evt); } svg .k-out { stroke: var(--out); } svg .k-store { stroke: var(--store); }
+svg .core { fill: var(--bg); stroke: var(--core); stroke-width: 2; }
+svg .t { fill: var(--fg); font-family: var(--font-body); font-size: 15px; font-weight: 600; }
+svg .tc { fill: var(--fg); font-family: var(--font-mono); font-size: 19px; font-weight: 500; }
+svg .s { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+svg .l { fill: var(--fg); font-family: var(--font-mono); font-size: 11px; }
+svg .h { fill: var(--muted); font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+svg .e { fill: none; stroke-width: 1.6; }
+svg .e-in { stroke: var(--in); } svg .e-evt { stroke: var(--evt); } svg .e-out { stroke: var(--out); } svg .e-store { stroke: var(--store); }
+svg .m-in { fill: var(--in); } svg .m-evt { fill: var(--evt); } svg .m-out { fill: var(--out); } svg .m-store { fill: var(--store); }
+svg .dash { stroke-dasharray: 5 4; }
+svg .box.dash { stroke-dasharray: 6 4; }
+svg a.jump { cursor: pointer; }
+svg a.jump:hover .box, svg a.jump:focus .box { stroke-width: 2.5; }
+svg a.jump .t { text-decoration: underline; text-decoration-color: var(--line); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 24px; }
+.grid > section { min-width: 0; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+td:first-child { white-space: nowrap; font-weight: 500; }
+.notes { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 95ch; }
+.notes li.risk::marker { color: var(--warn); }
+.empty { color: var(--muted); padding: 40px 0; }
+h3 { font-size: 0.95rem; font-weight: 600; margin: 18px 0 8px; }
+.review-meta { margin: 0 0 12px; color: var(--muted); font-size: 0.85rem; max-width: 110ch; }
+table.risks td:not(:last-child) { white-space: nowrap; width: 1%; }
+table.risks td:last-child { white-space: normal; overflow-wrap: anywhere; min-width: 32ch; }
+.sev, .cat { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid; }
+.sev-high { color: var(--warn); border-color: var(--warn); }
+.sev-med { color: var(--evt); border-color: var(--evt); }
+.sev-low { color: var(--muted); border-color: var(--line); }
+.cat { font-weight: 500; font-family: var(--font-mono); border-color: var(--line); color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; display: grid; gap: 4px; min-width: 120px; }
+.stats b { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats span { color: var(--muted); font-size: 0.85rem; }
+main a { color: var(--in); }
+/* "all" ring */
+.ring-wrap svg.ring { min-width: 900px; max-width: 1180px; margin: 0 auto; }
+svg .ge-line { fill: none; stroke-width: 1.5; opacity: 0.75; transition: opacity .15s; }
+svg .ge-http { stroke: var(--muted); } svg .ge-evt { stroke: var(--evt); }
+svg .ge-hit { fill: none; stroke: transparent; stroke-width: 12; }
+svg .gm-http { fill: var(--muted); } svg .gm-evt { fill: var(--evt); } svg .gm-out { fill: var(--out); } svg .gm-in { fill: var(--in); }
+svg.ring.focus .ge .ge-line { opacity: 0.1; }
+svg.ring.focus .ge.hl-out .ge-line { opacity: 1; stroke: var(--out); stroke-width: 2.4; }
+svg.ring.focus .ge.hl-in .ge-line { opacity: 1; stroke: var(--in); stroke-width: 2.4; }
+svg .gn-box { fill: var(--surface); stroke-width: 1.6; }
+svg .gn-svc { stroke: var(--core); } svg .gn-actor { stroke: var(--in); fill: var(--bg); stroke-width: 2.2; }
+svg .gn-ext { stroke: var(--muted); stroke-dasharray: 6 4; }
+svg .gn-t { fill: var(--fg); font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+svg .gn { cursor: pointer; outline: none; }
+svg .gn.on .gn-box, svg .gn:focus-visible .gn-box { stroke-width: 3; }
+svg.ring.focus .gn:not(.on) .gn-t { opacity: 0.85; }
+</style>
+</head>
+<body>
+
+<div class="picker">
+  <div class="wrap">
+    <span class="brand" id="brand">Services</span>
+    <nav class="chips" id="chips" aria-label="Services"></nav>
+    <label for="svc-select" class="mono" hidden>Service</label>
+    <select id="svc-select" aria-label="Service"></select>
+  </div>
+</div>
+
+<main class="wrap" id="view"></main>
+
+<script>
+/*DATA*/
+
+/* ---------- Diagram renderer ---------- */
+const NS = "http://www.w3.org/2000/svg";
+const W = 1240, COLW = 290, LX = 30, RX = W - 30 - COLW, CX = 440, CW = 360, GAP = 14, LINE = 16;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function wrap(text, max) {
+  const out = []; let cur = "";
+  for (const w of String(text).split(" ")) {
+    if (!cur) cur = w;
+    else if ((cur + " " + w).length <= max) cur += " " + w;
+    else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  return out.flatMap(l => l.length <= max ? [l] : l.match(new RegExp(".{1," + max + "}", "g")));
+}
+
+function layoutBox(b, width) {
+  const max = Math.floor((width - 28) / 6.7);
+  const sub = b.sub ? wrap(b.sub, max) : [];
+  const lines = (b.lines || []).flatMap(l => wrap(l, max));
+  const h = 30 + sub.length * 16 + (lines.length ? 8 + lines.length * LINE : 0) + 6;
+  return { ...b, sub, lines, h };
+}
+
+function boxSvg(b, x, y, w) {
+  let s = `<rect class="box k-${b.kind}${b.opt ? " dash" : ""}" x="${x}" y="${y}" width="${w}" height="${b.h}" rx="6"/>`;
+  s += `<text class="t" x="${x + 14}" y="${y + 23}">${esc(b.title)}</text>`;
+  let ty = y + 23;
+  b.sub.forEach(l => { ty += 16; s += `<text class="s" x="${x + 14}" y="${ty}">${esc(l)}</text>`; });
+  if (b.lines.length) ty += 6;
+  b.lines.forEach(l => { ty += LINE; s += `<text class="l" x="${x + 14}" y="${ty}">${esc(l)}</text>`; });
+  if (b.link && SERVICES.some(z => z.id === b.link)) s = `<a class="jump" href="#${b.link}" aria-label="Open ${esc(b.link)}">${s}</a>`;
+  return s;
+}
+
+function stack(boxes, x, top) {
+  let y = top;
+  return boxes.map(b => { const r = { b, x, y }; y += b.h + GAP; return r; });
+}
+const stackH = list => list.length ? list.reduce((a, b) => a + b.h, 0) + GAP * (list.length - 1) : 0;
+
+function render(svc) {
+  const left = (svc.inbound || []).map(b => layoutBox(b, COLW));
+  const right = (svc.outbound || []).map(b => layoutBox(b, COLW));
+  let coreH = 70;
+  const coreSecs = (svc.core || []).map(sec => { const lines = sec.lines.flatMap(l => wrap(l, 48)); coreH += 26 + lines.length * LINE; return { h: sec.h, lines }; });
+  coreH += 10;
+  const top = 34;
+  const colH = Math.max(stackH(left), stackH(right), coreH);
+  const L = stack(left, LX, top + (colH - stackH(left)) / 2);
+  const R = stack(right, RX, top + (colH - stackH(right)) / 2);
+  const coreY = top + (colH - coreH) / 2;
+
+  let s = `<defs>${["in","evt","out","store"].map(k => `<marker id="a-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-${k}" d="M0,0 L10,5 L0,10 z"/></marker>`).join("")}</defs>`;
+  s += `<text class="h" x="${LX}" y="18">CALLERS AND EVENT SOURCES</text><text class="h" x="${RX}" y="18">WHAT IT CALLS</text>`;
+
+  // edges left → core
+  const pin = (n, i, y0, h) => y0 + 30 + (h - 60) * (n === 1 ? 0.5 : i / (n - 1));
+  L.forEach((p, i) => {
+    const ty = pin(L.length, i, coreY, coreH), sy = p.y + p.b.h / 2;
+    const k = p.b.kind === "evt" ? "evt" : "in";
+    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${LX + COLW},${sy} C${LX + COLW + 60},${sy} ${CX - 60},${ty} ${CX},${ty}" marker-end="url(#a-${k})"/>`;
+  });
+  R.forEach((p, i) => {
+    const sy = pin(R.length, i, coreY, coreH), ty = p.y + p.b.h / 2;
+    const k = p.b.kind === "evt" ? "evt" : p.b.kind === "in" ? "in" : "out";
+    const rev = p.b.dir === "from";
+    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${CX + CW},${sy} C${CX + CW + 60},${sy} ${RX - 60},${ty} ${RX},${ty}" ${rev ? `marker-start="url(#a-${k})"` : `marker-end="url(#a-${k})"`}${p.b.dir === "both" ? ` marker-start="url(#a-${k})"` : ""}/>`;
+  });
+
+  // core
+  s += `<rect class="core" x="${CX}" y="${coreY}" width="${CW}" height="${coreH}" rx="10"/>`;
+  s += `<text class="tc" x="${CX + 20}" y="${coreY + 32}">${esc(svc.id)}</text>`;
+  s += `<text class="s" x="${CX + 20}" y="${coreY + 50}">${esc(svc.port ? ":" + svc.port : "")}${svc.stack ? " · " + esc(svc.stack) : ""}</text>`;
+  let cy = coreY + 70;
+  coreSecs.forEach(sec => {
+    cy += 10; s += `<text class="h" x="${CX + 20}" y="${cy}">${esc(sec.h)}</text>`; cy += 2;
+    sec.lines.forEach(l => { cy += LINE; s += `<text class="l" x="${CX + 20}" y="${cy}">${esc(l)}</text>`; });
+    cy += 14 - 2;
+  });
+
+  // storage rows
+  let bottom = top + colH;
+  const st = svc.storage || [];
+  if (st.length) {
+    const perRow = Math.min(4, st.length);
+    const sw = (W - 60 - GAP * 2 * (perRow - 1)) / perRow;
+    const rows = [];
+    for (let i = 0; i < st.length; i += perRow) rows.push(st.slice(i, i + perRow).map(b => layoutBox(b, sw)));
+    let ry = bottom + 70;
+    s += `<text class="h" x="${LX}" y="${ry - 12}">STORAGE AND SHARED INFRASTRUCTURE</text>`;
+    const busY = bottom + 30;
+    rows.forEach((row, ri) => {
+      const rh = Math.max(...row.map(b => b.h));
+      row.forEach((b, i) => {
+        const x = LX + i * (sw + GAP * 2), cxm = x + sw / 2;
+        s += boxSvg(b, x, ry, sw);
+        if (b.feeds !== undefined) return; // drawn below
+        const k = b.kind === "store" ? "store" : b.kind;
+        const srcX = Math.max(CX + 30, Math.min(CX + CW - 30, cxm));
+        const both = b.kind === "store" && b.dir !== "to" && b.dir !== "from";
+        if (ri === 0) {
+          s += `<path class="e e-${k}${b.opt ? " dash" : ""}" d="M${srcX},${coreY + coreH} V${busY + (i % 2) * 8} H${cxm} V${ry}" marker-end="url(#a-${k})"${both || b.dir === "from" ? ` marker-start="url(#a-${k})"` : ""}/>`;
+        }
+      });
+      // feeder boxes: arrow from box to the box index it feeds
+      row.forEach((b, i) => {
+        if (b.feeds === undefined) return;
+        const x = LX + i * (sw + GAP * 2), tx = LX + b.feeds * (sw + GAP * 2);
+        const fromRight = tx > x;
+        const y = ry + 40;
+        s += `<path class="e e-${b.kind === "evt" ? "evt" : "in"}" d="M${fromRight ? x + sw : x},${y} H${fromRight ? tx : tx + sw}" marker-end="url(#a-${b.kind === "evt" ? "evt" : "in"})"/>`;
+      });
+      ry += rh + GAP * 2;
+    });
+    bottom = ry;
+  }
+
+  // boxes on top of edges
+  L.forEach(p => s += boxSvg(p.b, p.x, p.y, COLW));
+  R.forEach(p => s += boxSvg(p.b, p.x, p.y, COLW));
+
+  return `<svg viewBox="0 0 ${W} ${Math.ceil(bottom + 10)}" role="img" aria-label="${esc(svc.id)} system context: callers on the left, dependencies on the right, storage below">${s}</svg>`;
+}
+
+/* ---------- "all" view: service dependency ring ----------
+   Arrows point from caller/producer to callee/consumer. Databases, caches, object stores and queues are not nodes:
+   an event that travels over a queue or pub/sub is drawn as a direct producer → consumer edge. */
+const gLabel = id => (GRAPH_NODES[id] && GRAPH_NODES[id].label) || id;
+const gLink = id => GRAPH_NODES[id] ? GRAPH_NODES[id].link : (SERVICES.some(s => s.id === id) ? id : null);
+
+function renderAll() {
+  const GW = 1180, GH = 860, cx = GW / 2, cy = GH / 2, rx = 480, ry = 375, NH = 34;
+  const pos = {};
+  const n = GRAPH_ORDER.length;
+  const ang = GRAPH_ORDER.map((_, i) => -Math.PI / 2 + i * 2 * Math.PI / n);
+  const hw = GRAPH_ORDER.map(id => Math.round(gLabel(id).length * 7.9 + 28) / 2);
+  const at = i => ({ x: cx + rx * Math.cos(ang[i]), y: cy + ry * Math.sin(ang[i]) });
+  // nudge neighbours apart along the ring until no labels touch (the first node stays fixed at the top)
+  for (let it = 0; it < 200; it++) {
+    let moved = false;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, p = at(i), q = at(j);
+      if (Math.abs(p.x - q.x) < hw[i] + hw[j] + 14 && Math.abs(p.y - q.y) < NH + 10) {
+        if (i !== 0) ang[i] -= 0.004;
+        if (j !== 0) ang[j] += 0.004;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  GRAPH_ORDER.forEach((id, i) => { const p = at(i); pos[id] = { x: p.x, y: p.y, hw: hw[i], hh: NH / 2 }; });
+  // merge parallel edges between the same ordered pair
+  const pairs = new Map();
+  GRAPH_EDGES.forEach(([f, t, type, what, opt]) => {
+    const k = f + ">" + t;
+    if (!pairs.has(k)) pairs.set(k, { f, t, items: [] });
+    pairs.get(k).items.push({ type, what, opt: !!opt });
+  });
+  const hit = (p, dx, dy) => { const s = Math.min(p.hw / Math.abs(dx || 1e-9), p.hh / Math.abs(dy || 1e-9)); return [p.x + dx * s, p.y + dy * s]; };
+  const mk = ["http", "evt", "out", "in"].map(k => `<marker id="g-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="gm-${k}" d="M0,0 L10,5 L0,10 z"/></marker>`).join("");
+  let edges = "";
+  pairs.forEach(({ f, t, items }) => {
+    const A = pos[f], B = pos[t];
+    const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy);
+    // bend toward the centre (keeps short hops off neighbouring boxes) plus a little to the left of travel so A→B and B→A separate
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    const qx = mx + (cx - mx) * 0.2 + (dy / len) * Math.max(18, len * 0.06), qy = my + (cy - my) * 0.2 - (dx / len) * Math.max(18, len * 0.06);
+    const [sx, sy] = hit(A, qx - A.x, qy - A.y);
+    const [ex0, ey0] = hit(B, qx - B.x, qy - B.y);
+    const el = Math.hypot(qx - ex0, qy - ey0), ex = ex0 + (qx - ex0) / el * 3, ey = ey0 + (qy - ey0) / el * 3;
+    const type = items.some(i => i.type === "http") ? "http" : "evt";
+    const opt = items.every(i => i.opt);
+    const d = `M${sx.toFixed(1)},${sy.toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
+    const tip = `${gLabel(f)} → ${gLabel(t)}\n` + items.map(i => `• ${i.type === "evt" ? "[event] " : ""}${i.what}${i.opt ? " (optional)" : ""}`).join("\n");
+    edges += `<g class="ge" data-f="${f}" data-t="${t}" data-type="${type}"><title>${esc(tip)}</title>`
+      + `<path class="ge-hit" d="${d}"/><path class="ge-line ge-${type}${opt ? " dash" : ""}" d="${d}" marker-end="url(#g-${type})"/></g>`;
+  });
+  let nodes = "";
+  GRAPH_ORDER.forEach(id => {
+    const p = pos[id], n = GRAPH_NODES[id] || {}, link = gLink(id);
+    const cls = n.kind === "actor" ? "gn-actor" : n.kind === "ext" ? "gn-ext" : "gn-svc";
+    let g = `<rect class="gn-box ${cls}" x="${(p.x - p.hw).toFixed(1)}" y="${(p.y - p.hh).toFixed(1)}" width="${(p.hw * 2).toFixed(1)}" height="${p.hh * 2}" rx="${n.kind === "actor" ? p.hh : 7}"/>`
+      + `<text class="gn-t" x="${p.x.toFixed(1)}" y="${(p.y + 4.5).toFixed(1)}" text-anchor="middle">${esc(gLabel(id))}</text>`;
+    g = link ? `<a class="gn jump" data-id="${id}" href="#${link}" aria-label="${esc(gLabel(id))}: open its map">${g}</a>`
+             : `<g class="gn" data-id="${id}" tabindex="0" aria-label="${esc(gLabel(id))}">${g}</g>`;
+    nodes += g;
+  });
+  return `<svg class="ring" viewBox="0 0 ${GW} ${GH}" role="img" aria-label="Dependency graph of all services arranged in a circle; arrows point from caller to callee"><defs>${mk}</defs><g class="edges">${edges}</g>${nodes}</svg>`;
+}
+
+function wireAll(svg) {
+  const lines = [...svg.querySelectorAll(".ge")];
+  const set = id => {
+    svg.classList.toggle("focus", !!id);
+    lines.forEach(g => {
+      const out = id && g.dataset.f === id, inn = id && g.dataset.t === id;
+      g.classList.toggle("hl-out", !!out); g.classList.toggle("hl-in", !!inn && !out);
+      g.querySelector(".ge-line").setAttribute("marker-end", `url(#g-${out ? "out" : inn ? "in" : g.dataset.type})`);
+    });
+    svg.querySelectorAll(".gn").forEach(n => n.classList.toggle("on", n.dataset.id === id));
+  };
+  svg.querySelectorAll(".gn").forEach(n => {
+    n.addEventListener("mouseenter", () => set(n.dataset.id));
+    n.addEventListener("focus", () => set(n.dataset.id));
+    n.addEventListener("mouseleave", () => set(null));
+    n.addEventListener("blur", () => set(null));
+  });
+}
+
+function riskSummary() {
+  const all = SERVICES.flatMap(s => (s.notes || []).map(n => ({ n, svc: s.id })));
+  const count = k => all.filter(x => x.n[0] === k).length;
+  const perSvc = SERVICES.map(s => ({ id: s.id, h: (s.notes || []).filter(n => n[0] === "high").length, m: (s.notes || []).filter(n => n[0] === "med").length, l: (s.notes || []).filter(n => n[0] === "low").length }))
+    .sort((a, b) => b.h - a.h || b.m - a.m);
+  return `<section><h2>Risk review</h2>
+    <p class="review-meta">${esc(PROJECT.reviewMeta || "")}</p>
+    <div class="stats"><div><b>${count("high")}</b><span>${sevBadge("high")}</span></div><div><b>${count("med")}</b><span>${sevBadge("med")}</span></div><div><b>${count("low")}</b><span>${sevBadge("low")}</span></div><div><b>${all.length}</b><span>issues across ${SERVICES.length} services</span></div></div>
+    <div class="grid">
+      <div><h3>By service</h3><div class="tbl"><table><thead><tr><th>Service</th><th>High</th><th>Medium</th><th>Low</th></tr></thead><tbody>${perSvc.map(r => `<tr><td class="mono"><a href="#${r.id}">${esc(r.id)}</a></td><td>${r.h || ""}</td><td>${r.m || ""}</td><td>${r.l || ""}</td></tr>`).join("")}</tbody></table></div></div>
+      <div><h3>Cross-cutting themes</h3><ul class="notes">${(PROJECT.themes || []).map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join("")}</ul></div>
+    </div>
+    <h3>All high-severity issues</h3>
+    ${notesTable(all.filter(x => x.n[0] === "high"), true)}
+  </section>`;
+}
+
+function showAll() {
+  const view = document.getElementById("view");
+  const rows = GRAPH_EDGES.slice().sort((a, b) => gLabel(a[0]).localeCompare(gLabel(b[0])) || gLabel(a[1]).localeCompare(gLabel(b[1])));
+  view.innerHTML = `
+    <header class="svc">
+      <h1>all services</h1>
+      <p>Every service-to-service dependency on one ring. An arrow points from the caller (or event producer) to the callee (or consumer). Databases, caches, object stores and queues are left out as nodes; events that travel through a queue or pub/sub are drawn as a direct edge between producer and consumer.</p>
+    </header>
+    <div class="legend" aria-label="Legend">
+      <span><i style="border-color:var(--muted)"></i>HTTP / WebSocket call</span>
+      <span><i style="border-color:var(--evt)"></i>Events, media or direct DB coupling only</span>
+      <span>Dashed: optional or env-gated</span>
+      <span>Hover a node: <b style="color:var(--out)">outgoing</b> / <b style="color:var(--in)">incoming</b>. Click to open its map</span>
+    </div>
+    <div class="diagram ring-wrap">${renderAll()}</div>
+    ${PROJECT.notShown ? `<p class="mono" style="margin:0;color:var(--muted);font-size:0.8rem">Not shown: ${esc(PROJECT.notShown)}</p>` : ""}
+    ${riskSummary()}
+    <section><h2>Edges</h2><div class="tbl"><table><thead><tr><th>From</th><th>To</th><th>Type</th><th>What</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(gLabel(r[0]))}</td><td class="mono">${esc(gLabel(r[1]))}</td><td>${r[2] === "evt" ? "event" : "HTTP"}${r[4] ? " · optional" : ""}</td><td>${esc(r[3])}</td></tr>`).join("")}</tbody></table></div></section>
+  `;
+  wireAll(view.querySelector("svg.ring"));
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Risk review rendering ---------- */
+const SEV_ORDER = { high: 0, med: 1, low: 2 };
+const SEV_LABEL = { high: "High", med: "Medium", low: "Low" };
+const sevBadge = s => `<span class="sev sev-${s}">${SEV_LABEL[s]}</span>`;
+const CAT_LABEL = { reliability: "Reliability", observability: "Observability", maintainability: "Maintainability", security: "Security", bugs: "Bugs", scalability: "Scalability" };
+const catBadge = c => `<span class="cat">${CAT_LABEL[c] || c}</span>`;
+// notes: raw [sev, category, text] arrays, or {n, svc} when listing across services
+function notesTable(notes, withSvc) {
+  const rows = notes.map(x => Array.isArray(x) ? { n: x } : x).sort((a, b) => SEV_ORDER[a.n[0]] - SEV_ORDER[b.n[0]]);
+  return `<div class="tbl"><table class="risks"><thead><tr><th>Severity</th>${withSvc ? "<th>Service</th>" : ""}<th>Category</th><th>Issue</th></tr></thead><tbody>${rows.map(({ n, svc }) =>
+    `<tr><td>${sevBadge(n[0])}</td>${withSvc ? `<td class="mono"><a href="#${svc}">${esc(svc)}</a></td>` : ""}<td>${catBadge(n[1])}</td><td>${esc(n[2])}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function table(rows, a) {
+  if (!rows || !rows.length) return `<p class="empty">None found.</p>`;
+  return `<div class="tbl"><table><thead><tr><th>${a}</th><th>Interface</th><th>Purpose</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function show(id) {
+  const svc = SERVICES.find(s => s.id === id);
+  const view = document.getElementById("view");
+  document.querySelectorAll("#chips a").forEach(a => { if (a.dataset.id === id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  document.getElementById("svc-select").value = id;
+  if (id === "all") { showAll(); return; }
+  if (!svc) { view.innerHTML = `<header class="svc"><h1>${esc(id)}</h1><p>Not mapped yet.</p></header>`; return; }
+  document.title = PROJECT.name + " Architecture Map";
+  view.innerHTML = `
+    <header class="svc">
+      <h1>${esc(svc.id)}${svc.port ? `<small>port ${svc.port}</small>` : ""}</h1>
+      <p>${esc(svc.summary)}</p>
+    </header>
+    <div class="legend" aria-label="Legend">
+      <span><i style="border-color:var(--in)"></i>Inbound HTTP</span>
+      <span><i style="border-color:var(--evt)"></i>Events and queues</span>
+      <span><i style="border-color:var(--out)"></i>Outbound HTTP</span>
+      <span><i style="border-color:var(--store)"></i>Storage</span>
+      <span>Dashed: optional, env-gated or unused</span>
+      <span>Click a service box to open its map</span>
+    </div>
+    <div class="diagram">${render(svc)}</div>
+    <div class="grid">
+      <section><h2>Inbound</h2>${table(svc.tablesIn, "From")}</section>
+      <section><h2>Outbound</h2>${table(svc.tablesOut, "To")}</section>
+    </div>
+    ${svc.jobs && svc.jobs.length ? `<section><h2>Background jobs</h2>${table(svc.jobs.map(j => [j[0], j[1], j[2]]), "Job").replace("<th>Interface</th>", "<th>Cadence</th>")}</section>` : ""}
+    ${svc.notes && svc.notes.length ? `<section><h2>Risks and issues</h2><p class="review-meta">${esc(PROJECT.reviewMeta || "")}</p>${notesTable(svc.notes)}</section>` : ""}
+  `;
+  window.scrollTo(0, 0);
+}
+
+function init() {
+  document.getElementById("brand").textContent = PROJECT.name + " services";
+  document.title = PROJECT.name + " Architecture Map";
+  const chips = document.getElementById("chips"), sel = document.getElementById("svc-select");
+  ["all", ...ALL_IDS].forEach(id => {
+    const mapped = id === "all" || SERVICES.some(s => s.id === id);
+    const a = document.createElement("a");
+    a.href = "#" + id; a.textContent = id; a.dataset.id = id; if (!mapped) a.classList.add("pending");
+    chips.appendChild(a);
+    const o = document.createElement("option"); o.value = id; o.textContent = id + (mapped ? "" : " (not mapped)"); sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => { location.hash = sel.value; });
+  const route = () => { const h = location.hash.slice(1); show(h === "all" || ALL_IDS.includes(h) ? h : DEFAULT_ID); };
+  window.addEventListener("hashchange", route);
+  route();
+}
+init();
+</script>
+
+</body>
+</html>

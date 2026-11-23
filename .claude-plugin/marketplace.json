@@ -1,0 +1,16 @@
+{
+  "name": "arch-skills",
+  "owner": { "name": "Gustavo Garcia", "url": "https://github.com/ggarber" },
+  "metadata": {
+    "description": "Architecture documentation and review skills."
+  },
+  "plugins": [
+    {
+      "name": "arch-skills",
+      "source": "./",
+      "description": "Generate a self-contained HTML architecture map of a multi-service codebase with a verified risk review.",
+      "version": "0.1.0",
+      "category": "documentation"
+    }
+  ]
+}
