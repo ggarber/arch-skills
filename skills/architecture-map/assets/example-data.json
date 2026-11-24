@@ -8,7 +8,6 @@
       { "title": "Shared static keys", "text": "orders and payments share one internal API key, compared with !==." }
     ]
   },
-  "defaultId": "orders-service",
   "services": [
     {
       "id": "orders-service", "port": 3000, "stack": "Node · NestJS",
@@ -18,15 +17,15 @@
         { "h": "IN-MEMORY", "lines": ["Checkout sessions (Map)"] }
       ],
       "inbound": [
-        { "kind": "in", "title": "Storefront", "sub": "HTTPS · JWT", "lines": ["POST /cart", "POST /checkout", "GET /orders/:id"] },
-        { "kind": "evt", "link": "payments-service", "title": "payments-service", "sub": "queue · payment.settled", "lines": ["marks order paid"] }
+        { "kind": "in", "title": "Storefront", "sub": "HTTPS · JWT", "lines": ["POST /cart", "POST /checkout", "GET /orders/:id"] }
       ],
       "outbound": [
-        { "kind": "out", "link": "payments-service", "title": "payments-service", "sub": "HTTP · INTERNAL_API_KEY", "lines": ["POST /charges"] },
-        { "kind": "evt", "link": "notifications-worker", "title": "order-events queue", "sub": "ORDER_EVENTS_QUEUE_URL", "lines": ["order.created · order.shipped"] }
+        { "kind": "out", "link": "payments-service", "title": "payments-service", "sub": "HTTP · INTERNAL_API_KEY", "lines": ["POST /charges"] }
       ],
       "storage": [
         { "kind": "store", "title": "PostgreSQL", "sub": "ORM", "lines": ["orders · order_items · carts"] },
+        { "kind": "evt", "dir": "from", "title": "payment-events queue", "sub": "consumes · from payments-service", "lines": ["payment.settled → mark paid"] },
+        { "kind": "evt", "dir": "to", "title": "order-events queue", "sub": "ORDER_EVENTS_QUEUE_URL", "lines": ["order.created · order.shipped"] },
         { "kind": "store", "dir": "to", "title": "Object store", "sub": "PutObject", "lines": ["invoices/{orderId}.pdf"] }
       ],
       "tablesIn": [
@@ -42,7 +41,7 @@
       ],
       "notes": [
         ["high", "reliability", "Checkout sessions live in an in-process Map (src/checkout/session.store.ts:12), so every deploy or restart drops carts in checkout and a second replica cannot see them. Move them to the shared database or cache."],
-        ["med", "security", "GET /orders/:id checks the JWT but not that the order belongs to the caller (src/orders/orders.controller.ts:40), so any customer can read any order by id."],
+        ["med", ["security", "bugs"], "GET /orders/:id checks the JWT but not that the order belongs to the caller (src/orders/orders.controller.ts:40), so any customer can read any order by id."],
         ["low", "reliability", "AbandonedCartSweep runs on every replica with no lock (src/jobs/abandoned-cart.job.ts:8); it is idempotent but wastes queries."]
       ]
     },
@@ -55,12 +54,20 @@
         { "kind": "in", "title": "Payment provider", "sub": "HTTPS webhook · signature", "lines": ["POST /webhooks/provider"] }
       ],
       "outbound": [
-        { "kind": "out", "title": "Payment provider API", "sub": "HTTPS · PROVIDER_SECRET_KEY", "lines": ["create charge · refund"] },
-        { "kind": "evt", "link": "orders-service", "title": "payment-events queue", "sub": "queue", "lines": ["payment.settled"] }
+        { "kind": "out", "title": "Payment provider API", "sub": "HTTPS · PROVIDER_SECRET_KEY", "lines": ["create charge · refund"] }
       ],
-      "storage": [{ "kind": "store", "title": "PostgreSQL", "sub": "ORM", "lines": ["charges · refunds"] }],
-      "tablesIn": [["orders-service", "POST /charges", "Charge a customer"]],
-      "tablesOut": [["Payment provider API", "POST /charges", "Create the charge"]],
+      "storage": [
+        { "kind": "store", "title": "PostgreSQL", "sub": "ORM", "lines": ["charges · refunds"] },
+        { "kind": "evt", "dir": "to", "title": "payment-events queue", "sub": "publishes", "lines": ["payment.settled"] }
+      ],
+      "tablesIn": [
+        ["orders-service", "POST /charges", "Charge a customer"],
+        ["Payment provider", "POST /webhooks/provider", "Settlement and refund webhooks, signature verified"]
+      ],
+      "tablesOut": [
+        ["Payment provider API", "POST /charges", "Create the charge"],
+        ["payment-events queue", "publish payment.settled", "Tell orders a charge settled"]
+      ],
       "notes": [
         ["med", "security", "The internal API key is compared with !== (src/auth/api-key.guard.ts:15) instead of a constant-time comparison."]
       ]
@@ -69,9 +76,9 @@
       "id": "notifications-worker",
       "summary": "Consumes order events and sends email.",
       "core": [{ "h": "WORKER", "lines": ["order.* → email templates"] }],
-      "inbound": [{ "kind": "evt", "link": "orders-service", "title": "order-events queue", "sub": "long poll", "lines": ["order.created · order.shipped"] }],
+      "inbound": [],
       "outbound": [{ "kind": "out", "title": "Email provider", "sub": "HTTPS · EMAIL_API_KEY", "lines": ["send"] }],
-      "storage": [],
+      "storage": [{ "kind": "evt", "dir": "from", "title": "order-events queue", "sub": "long poll · from orders-service", "lines": ["order.created · order.shipped"] }],
       "tablesIn": [["order-events queue", "ReceiveMessage", "Order notifications"]],
       "tablesOut": [["Email provider", "POST /send", "Deliver email"]],
       "notes": [

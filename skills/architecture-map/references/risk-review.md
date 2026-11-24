@@ -1,6 +1,6 @@
 # Risk review
 
-Each service gets a `notes` list of `[severity, category, text]`. Only verified findings go in.
+Each service gets a `notes` list of `[severity, category, text]`, where `category` is one value or a list of them. Only verified findings go in.
 
 ## What to look for
 

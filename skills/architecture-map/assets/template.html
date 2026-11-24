@@ -6,7 +6,7 @@
 <title>Architecture Map</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: sticky service picker, then one generated system-context diagram + reference tables per service */
+/* Layout: sticky picker; home page (dependency ring + risk summary) and one page per service (context diagram, interfaces, risks) */
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5d6676; --line: #d5dae2; --chip: #eceff4;
   --in: #2f6fd0; --evt: #b7791f; --out: #13877a; --store: #7a55c7; --core: #1b2230; --warn: #b4442f;
@@ -92,6 +92,19 @@ table.risks td:last-child { white-space: normal; overflow-wrap: anywhere; min-wi
 .stats b { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stats span { color: var(--muted); font-size: 0.85rem; }
 main a { color: var(--in); }
+.io { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 720px) { .io { grid-template-columns: 1fr; } }
+.io > section { min-width: 0; }
+.io h2 { display: flex; align-items: center; gap: 8px; }
+.io h2 i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; display: inline-block; }
+.iface { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.iface li { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: grid; gap: 2px; }
+.iface .who { font-weight: 600; }
+.iface .via { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+.iface .why { font-size: 0.9rem; }
+table.sum td, table.sum th { text-align: right; font-variant-numeric: tabular-nums; }
+table.sum td:first-child, table.sum th:first-child { text-align: left; }
+table.sum tfoot td { font-weight: 600; border-top: 2px solid var(--line); border-bottom: 0; }
 /* "all" ring */
 .ring-wrap svg.ring { min-width: 900px; max-width: 1180px; margin: 0 auto; }
 svg .ge-line { fill: none; stroke-width: 1.5; opacity: 0.75; transition: opacity .15s; }
@@ -167,9 +180,11 @@ function stack(boxes, x, top) {
 }
 const stackH = list => list.length ? list.reduce((a, b) => a + b.h, 0) + GAP * (list.length - 1) : 0;
 
+// Service diagram: outputs (what it calls) on the left, the service in the middle, inputs (callers, event sources)
+// on the right, databases, queues and storage below. Arrows follow the data/call direction, so they run right to left.
 function render(svc) {
-  const left = (svc.inbound || []).map(b => layoutBox(b, COLW));
-  const right = (svc.outbound || []).map(b => layoutBox(b, COLW));
+  const left = (svc.outbound || []).map(b => layoutBox(b, COLW));
+  const right = (svc.inbound || []).map(b => layoutBox(b, COLW));
   let coreH = 70;
   const coreSecs = (svc.core || []).map(sec => { const lines = sec.lines.flatMap(l => wrap(l, 48)); coreH += 26 + lines.length * LINE; return { h: sec.h, lines }; });
   coreH += 10;
@@ -180,20 +195,24 @@ function render(svc) {
   const coreY = top + (colH - coreH) / 2;
 
   let s = `<defs>${["in","evt","out","store"].map(k => `<marker id="a-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-${k}" d="M0,0 L10,5 L0,10 z"/></marker>`).join("")}</defs>`;
-  s += `<text class="h" x="${LX}" y="18">CALLERS AND EVENT SOURCES</text><text class="h" x="${RX}" y="18">WHAT IT CALLS</text>`;
+  s += `<text class="h" x="${LX}" y="18">OUTPUTS · WHAT IT CALLS</text><text class="h" x="${RX}" y="18">INPUTS · CALLERS AND EVENT SOURCES</text>`;
 
-  // edges left → core
   const pin = (n, i, y0, h) => y0 + 30 + (h - 60) * (n === 1 ? 0.5 : i / (n - 1));
-  L.forEach((p, i) => {
-    const ty = pin(L.length, i, coreY, coreH), sy = p.y + p.b.h / 2;
-    const k = p.b.kind === "evt" ? "evt" : "in";
-    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${LX + COLW},${sy} C${LX + COLW + 60},${sy} ${CX - 60},${ty} ${CX},${ty}" marker-end="url(#a-${k})"/>`;
-  });
+  const marks = (k, dir, dflt) => {
+    const d = dir || dflt;
+    return d === "both" ? `marker-start="url(#a-${k})" marker-end="url(#a-${k})"` : d === "from" ? `marker-start="url(#a-${k})"` : `marker-end="url(#a-${k})"`;
+  };
+  // inputs (right) → core
   R.forEach((p, i) => {
-    const sy = pin(R.length, i, coreY, coreH), ty = p.y + p.b.h / 2;
+    const ty = pin(R.length, i, coreY, coreH), sy = p.y + p.b.h / 2;
+    const k = p.b.kind === "evt" ? "evt" : "in";
+    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${RX},${sy} C${RX - 60},${sy} ${CX + CW + 60},${ty} ${CX + CW},${ty}" ${marks(k, p.b.dir, "to")}/>`;
+  });
+  // core → outputs (left)
+  L.forEach((p, i) => {
+    const sy = pin(L.length, i, coreY, coreH), ty = p.y + p.b.h / 2;
     const k = p.b.kind === "evt" ? "evt" : p.b.kind === "in" ? "in" : "out";
-    const rev = p.b.dir === "from";
-    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${CX + CW},${sy} C${CX + CW + 60},${sy} ${RX - 60},${ty} ${RX},${ty}" ${rev ? `marker-start="url(#a-${k})"` : `marker-end="url(#a-${k})"`}${p.b.dir === "both" ? ` marker-start="url(#a-${k})"` : ""}/>`;
+    s += `<path class="e e-${k}${p.b.opt ? " dash" : ""}" d="M${CX},${sy} C${CX - 60},${sy} ${LX + COLW + 60},${ty} ${LX + COLW},${ty}" ${marks(k, p.b.dir, "to")}/>`;
   });
 
   // core
@@ -216,8 +235,8 @@ function render(svc) {
     const rows = [];
     for (let i = 0; i < st.length; i += perRow) rows.push(st.slice(i, i + perRow).map(b => layoutBox(b, sw)));
     let ry = bottom + 70;
-    s += `<text class="h" x="${LX}" y="${ry - 12}">STORAGE AND SHARED INFRASTRUCTURE</text>`;
-    const busY = bottom + 30;
+    s += `<text class="h" x="${LX}" y="${bottom + 26}">DATABASES, QUEUES AND STORAGE</text>`;
+    const busY = bottom + 42;
     rows.forEach((row, ri) => {
       const rh = Math.max(...row.map(b => b.h));
       row.forEach((b, i) => {
@@ -226,9 +245,9 @@ function render(svc) {
         if (b.feeds !== undefined) return; // drawn below
         const k = b.kind === "store" ? "store" : b.kind;
         const srcX = Math.max(CX + 30, Math.min(CX + CW - 30, cxm));
-        const both = b.kind === "store" && b.dir !== "to" && b.dir !== "from";
         if (ri === 0) {
-          s += `<path class="e e-${k}${b.opt ? " dash" : ""}" d="M${srcX},${coreY + coreH} V${busY + (i % 2) * 8} H${cxm} V${ry}" marker-end="url(#a-${k})"${both || b.dir === "from" ? ` marker-start="url(#a-${k})"` : ""}/>`;
+          // dir: "to" = service writes/publishes, "from" = service reads/consumes, "both" (default)
+          s += `<path class="e e-${k}${b.opt ? " dash" : ""}" d="M${srcX},${coreY + coreH} V${busY + (i % 2) * 8} H${cxm} V${ry}" ${marks(k, b.dir, "both")}/>`;
         }
       });
       // feeder boxes: arrow from box to the box index it feeds
@@ -248,7 +267,7 @@ function render(svc) {
   L.forEach(p => s += boxSvg(p.b, p.x, p.y, COLW));
   R.forEach(p => s += boxSvg(p.b, p.x, p.y, COLW));
 
-  return `<svg viewBox="0 0 ${W} ${Math.ceil(bottom + 10)}" role="img" aria-label="${esc(svc.id)} system context: callers on the left, dependencies on the right, storage below">${s}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${Math.ceil(bottom + 10)}" role="img" aria-label="${esc(svc.id)} system context: outputs on the left, inputs on the right, databases, queues and storage below">${s}</svg>`;
 }
 
 /* ---------- "all" view: service dependency ring ----------
@@ -337,40 +356,37 @@ function wireAll(svg) {
 }
 
 function riskSummary() {
-  const all = SERVICES.flatMap(s => (s.notes || []).map(n => ({ n, svc: s.id })));
-  const count = k => all.filter(x => x.n[0] === k).length;
-  const perSvc = SERVICES.map(s => ({ id: s.id, h: (s.notes || []).filter(n => n[0] === "high").length, m: (s.notes || []).filter(n => n[0] === "med").length, l: (s.notes || []).filter(n => n[0] === "low").length }))
-    .sort((a, b) => b.h - a.h || b.m - a.m);
-  return `<section><h2>Risk review</h2>
+  const cnt = (s, k) => (s.notes || []).filter(n => n[0] === k).length;
+  const rows = SERVICES.map(s => ({ id: s.id, h: cnt(s, "high"), m: cnt(s, "med"), l: cnt(s, "low") }))
+    .map(r => ({ ...r, t: r.h + r.m + r.l }))
+    .sort((a, b) => b.h - a.h || b.m - a.m || b.l - a.l || a.id.localeCompare(b.id));
+  const sum = k => rows.reduce((a, r) => a + r[k], 0);
+  const cell = v => v ? v : `<span style="color:var(--muted)">0</span>`;
+  return `<section><h2>Risk summary</h2>
     <p class="review-meta">${esc(PROJECT.reviewMeta || "")}</p>
-    <div class="stats"><div><b>${count("high")}</b><span>${sevBadge("high")}</span></div><div><b>${count("med")}</b><span>${sevBadge("med")}</span></div><div><b>${count("low")}</b><span>${sevBadge("low")}</span></div><div><b>${all.length}</b><span>issues across ${SERVICES.length} services</span></div></div>
-    <div class="grid">
-      <div><h3>By service</h3><div class="tbl"><table><thead><tr><th>Service</th><th>High</th><th>Medium</th><th>Low</th></tr></thead><tbody>${perSvc.map(r => `<tr><td class="mono"><a href="#${r.id}">${esc(r.id)}</a></td><td>${r.h || ""}</td><td>${r.m || ""}</td><td>${r.l || ""}</td></tr>`).join("")}</tbody></table></div></div>
-      <div><h3>Cross-cutting themes</h3><ul class="notes">${(PROJECT.themes || []).map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join("")}</ul></div>
-    </div>
-    <h3>All high-severity issues</h3>
-    ${notesTable(all.filter(x => x.n[0] === "high"), true)}
+    <div class="tbl"><table class="sum"><thead><tr><th>Service</th><th>${sevBadge("high")}</th><th>${sevBadge("med")}</th><th>${sevBadge("low")}</th><th>Total</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td class="mono"><a href="#${r.id}">${esc(r.id)}</a></td><td>${cell(r.h)}</td><td>${cell(r.m)}</td><td>${cell(r.l)}</td><td>${cell(r.t)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>All services</td><td>${sum("h")}</td><td>${sum("m")}</td><td>${sum("l")}</td><td>${sum("t")}</td></tr></tfoot></table></div>
+    ${(PROJECT.themes || []).length ? `<h3>Cross-cutting themes</h3><ul class="notes">${PROJECT.themes.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
 
-function showAll() {
+function showHome() {
   const view = document.getElementById("view");
-  const rows = GRAPH_EDGES.slice().sort((a, b) => gLabel(a[0]).localeCompare(gLabel(b[0])) || gLabel(a[1]).localeCompare(gLabel(b[1])));
   view.innerHTML = `
     <header class="svc">
-      <h1>all services</h1>
-      <p>Every service-to-service dependency on one ring. An arrow points from the caller (or event producer) to the callee (or consumer). Databases, caches, object stores and queues are left out as nodes; events that travel through a queue or pub/sub are drawn as a direct edge between producer and consumer.</p>
+      <h1>${esc(PROJECT.name)}<small>architecture</small></h1>
+      <p>Every service and its dependencies. An arrow points from the caller (or event producer) to the callee (or consumer). Databases, caches, object stores and queues are not drawn as nodes; events that travel through a queue or pub/sub are drawn as a direct edge between producer and consumer. Click a service to open its page.</p>
     </header>
     <div class="legend" aria-label="Legend">
       <span><i style="border-color:var(--muted)"></i>HTTP / WebSocket call</span>
       <span><i style="border-color:var(--evt)"></i>Events, media or direct DB coupling only</span>
       <span>Dashed: optional or env-gated</span>
-      <span>Hover a node: <b style="color:var(--out)">outgoing</b> / <b style="color:var(--in)">incoming</b>. Click to open its map</span>
+      <span>Hover a node: <b style="color:var(--out)">outgoing</b> / <b style="color:var(--in)">incoming</b></span>
     </div>
     <div class="diagram ring-wrap">${renderAll()}</div>
     ${PROJECT.notShown ? `<p class="mono" style="margin:0;color:var(--muted);font-size:0.8rem">Not shown: ${esc(PROJECT.notShown)}</p>` : ""}
     ${riskSummary()}
-    <section><h2>Edges</h2><div class="tbl"><table><thead><tr><th>From</th><th>To</th><th>Type</th><th>What</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(gLabel(r[0]))}</td><td class="mono">${esc(gLabel(r[1]))}</td><td>${r[2] === "evt" ? "event" : "HTTP"}${r[4] ? " · optional" : ""}</td><td>${esc(r[3])}</td></tr>`).join("")}</tbody></table></div></section>
   `;
   wireAll(view.querySelector("svg.ring"));
   window.scrollTo(0, 0);
@@ -381,17 +397,17 @@ const SEV_ORDER = { high: 0, med: 1, low: 2 };
 const SEV_LABEL = { high: "High", med: "Medium", low: "Low" };
 const sevBadge = s => `<span class="sev sev-${s}">${SEV_LABEL[s]}</span>`;
 const CAT_LABEL = { reliability: "Reliability", observability: "Observability", maintainability: "Maintainability", security: "Security", bugs: "Bugs", scalability: "Scalability" };
-const catBadge = c => `<span class="cat">${CAT_LABEL[c] || c}</span>`;
+const catBadge = c => [].concat(c).map(x => `<span class="cat">${CAT_LABEL[x] || esc(x)}</span>`).join(" ");
 // notes: raw [sev, category, text] arrays, or {n, svc} when listing across services
 function notesTable(notes, withSvc) {
   const rows = notes.map(x => Array.isArray(x) ? { n: x } : x).sort((a, b) => SEV_ORDER[a.n[0]] - SEV_ORDER[b.n[0]]);
-  return `<div class="tbl"><table class="risks"><thead><tr><th>Severity</th>${withSvc ? "<th>Service</th>" : ""}<th>Category</th><th>Issue</th></tr></thead><tbody>${rows.map(({ n, svc }) =>
+  return `<div class="tbl"><table class="risks"><thead><tr><th>Severity</th>${withSvc ? "<th>Service</th>" : ""}<th>Categories</th><th>Issue</th></tr></thead><tbody>${rows.map(({ n, svc }) =>
     `<tr><td>${sevBadge(n[0])}</td>${withSvc ? `<td class="mono"><a href="#${svc}">${esc(svc)}</a></td>` : ""}<td>${catBadge(n[1])}</td><td>${esc(n[2])}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-function table(rows, a) {
-  if (!rows || !rows.length) return `<p class="empty">None found.</p>`;
-  return `<div class="tbl"><table><thead><tr><th>${a}</th><th>Interface</th><th>Purpose</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join("")}</tbody></table></div>`;
+function ifaceList(rows, empty) {
+  if (!rows || !rows.length) return `<p class="empty" style="padding:8px 0">${empty}</p>`;
+  return `<ul class="iface">${rows.map(r => `<li><span class="who">${esc(r[0])}</span><span class="via">${esc(r[1])}</span><span class="why">${esc(r[2])}</span></li>`).join("")}</ul>`;
 }
 
 function show(id) {
@@ -399,29 +415,33 @@ function show(id) {
   const view = document.getElementById("view");
   document.querySelectorAll("#chips a").forEach(a => { if (a.dataset.id === id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   document.getElementById("svc-select").value = id;
-  if (id === "all") { showAll(); return; }
+  document.title = PROJECT.name + " Architecture Map" + (id ? " · " + id : "");
+  if (!id) { showHome(); return; }
   if (!svc) { view.innerHTML = `<header class="svc"><h1>${esc(id)}</h1><p>Not mapped yet.</p></header>`; return; }
-  document.title = PROJECT.name + " Architecture Map";
+  const jobs = (svc.jobs || []).map(j => [j[0], j[1], j[2]]);
   view.innerHTML = `
     <header class="svc">
       <h1>${esc(svc.id)}${svc.port ? `<small>port ${svc.port}</small>` : ""}</h1>
       <p>${esc(svc.summary)}</p>
     </header>
     <div class="legend" aria-label="Legend">
-      <span><i style="border-color:var(--in)"></i>Inbound HTTP</span>
+      <span><i style="border-color:var(--out)"></i>Outputs (left)</span>
+      <span><i style="border-color:var(--in)"></i>Inputs (right)</span>
       <span><i style="border-color:var(--evt)"></i>Events and queues</span>
-      <span><i style="border-color:var(--out)"></i>Outbound HTTP</span>
       <span><i style="border-color:var(--store)"></i>Storage</span>
       <span>Dashed: optional, env-gated or unused</span>
-      <span>Click a service box to open its map</span>
+      <span>Click a service box to open its page</span>
     </div>
     <div class="diagram">${render(svc)}</div>
-    <div class="grid">
-      <section><h2>Inbound</h2>${table(svc.tablesIn, "From")}</section>
-      <section><h2>Outbound</h2>${table(svc.tablesOut, "To")}</section>
-    </div>
-    ${svc.jobs && svc.jobs.length ? `<section><h2>Background jobs</h2>${table(svc.jobs.map(j => [j[0], j[1], j[2]]), "Job").replace("<th>Interface</th>", "<th>Cadence</th>")}</section>` : ""}
-    ${svc.notes && svc.notes.length ? `<section><h2>Risks and issues</h2><p class="review-meta">${esc(PROJECT.reviewMeta || "")}</p>${notesTable(svc.notes)}</section>` : ""}
+    <section><h2 style="margin-bottom:14px">Interfaces</h2>
+      <div class="io">
+        <section><h2><i style="border-color:var(--in)"></i>Inputs</h2>${ifaceList(svc.tablesIn, "No inputs found.")}
+          ${jobs.length ? `<h3>Scheduled jobs</h3>${ifaceList(jobs, "")}` : ""}</section>
+        <section><h2><i style="border-color:var(--out)"></i>Outputs</h2>${ifaceList(svc.tablesOut, "No outputs found.")}</section>
+      </div>
+    </section>
+    <section><h2>Risks</h2><p class="review-meta">${esc(PROJECT.reviewMeta || "")}</p>
+      ${svc.notes && svc.notes.length ? notesTable(svc.notes) : `<p class="empty" style="padding:8px 0">No verified risks.</p>`}</section>
   `;
   window.scrollTo(0, 0);
 }
@@ -430,15 +450,16 @@ function init() {
   document.getElementById("brand").textContent = PROJECT.name + " services";
   document.title = PROJECT.name + " Architecture Map";
   const chips = document.getElementById("chips"), sel = document.getElementById("svc-select");
-  ["all", ...ALL_IDS].forEach(id => {
-    const mapped = id === "all" || SERVICES.some(s => s.id === id);
+  ["", ...ALL_IDS].forEach(id => {
+    const mapped = id === "" || SERVICES.some(s => s.id === id);
+    const label = id || "home";
     const a = document.createElement("a");
-    a.href = "#" + id; a.textContent = id; a.dataset.id = id; if (!mapped) a.classList.add("pending");
+    a.href = "#" + id; a.textContent = label; a.dataset.id = id; if (!mapped) a.classList.add("pending");
     chips.appendChild(a);
-    const o = document.createElement("option"); o.value = id; o.textContent = id + (mapped ? "" : " (not mapped)"); sel.appendChild(o);
+    const o = document.createElement("option"); o.value = id; o.textContent = label + (mapped ? "" : " (not mapped)"); sel.appendChild(o);
   });
   sel.addEventListener("change", () => { location.hash = sel.value; });
-  const route = () => { const h = location.hash.slice(1); show(h === "all" || ALL_IDS.includes(h) ? h : DEFAULT_ID); };
+  const route = () => { const h = decodeURIComponent(location.hash.slice(1)); show(ALL_IDS.includes(h) ? h : ""); };
   window.addEventListener("hashchange", route);
   route();
 }

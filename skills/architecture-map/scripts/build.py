@@ -51,6 +51,8 @@ def validate(data):
                     errs.append(f"{sid}.{side}: kind must be one of {sorted(BOX_KINDS)} ({b.get('title')})")
                 if not b.get("title"):
                     errs.append(f"{sid}.{side}: every box needs a title")
+                if side == "storage" and b.get("kind") in ("in", "out"):
+                    errs.append(f"{sid}.storage: kind must be store or evt ({b.get('title')})")
                 if "dir" in b and b["dir"] not in DIRS:
                     errs.append(f"{sid}.{side}: dir must be one of {sorted(DIRS)}")
                 if b.get("link") and b["link"] not in ids:
@@ -65,8 +67,9 @@ def validate(data):
                 continue
             if n[0] not in SEVERITIES:
                 errs.append(f"{sid}.notes: severity '{n[0]}' not in {sorted(SEVERITIES)}")
-            if n[1] not in CATEGORIES:
-                errs.append(f"{sid}.notes: category '{n[1]}' not in {sorted(CATEGORIES)}")
+            cats = n[1] if isinstance(n[1], list) else [n[1]]
+            if not cats or any(c not in CATEGORIES for c in cats):
+                errs.append(f"{sid}.notes: category {n[1]!r} must be one of, or a list of, {sorted(CATEGORIES)}")
 
     for nid, node in (graph.get("nodes") or {}).items():
         if node.get("kind") and node["kind"] not in NODE_KINDS:
@@ -85,8 +88,6 @@ def validate(data):
             errs.append(f"graph.edges: both ends must appear in graph.order: {e[0]} -> {e[1]}")
         if e[2] not in EDGE_TYPES:
             errs.append(f"graph.edges: type must be one of {sorted(EDGE_TYPES)}: {e}")
-    if data.get("defaultId") and data["defaultId"] not in ids:
-        errs.append("defaultId must be a service id")
     return errs
 
 
@@ -109,7 +110,6 @@ def build(data):
         f"const PROJECT = {js(project)};",
         f"const SERVICES = {js(services)};",
         f"const ALL_IDS = {js(data.get('allIds') or [s['id'] for s in services])};",
-        f"const DEFAULT_ID = {js(data.get('defaultId') or services[0]['id'])};",
         f"const GRAPH_ORDER = {js(order)};",
         f"const GRAPH_NODES = {js(graph.get('nodes') or {})};",
         f"const GRAPH_EDGES = {js(graph.get('edges') or [])};",

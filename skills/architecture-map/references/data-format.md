@@ -8,9 +8,8 @@
     "name": "Acme",                       // shown in the header and tab title
     "reviewMeta": "Reviewed against ...",  // one sentence shown above every risk table
     "notShown": "end users' browsers, ...",// optional caption under the ring
-    "themes": [{ "title": "Per-pod state", "text": "..." }]  // cross-cutting themes on the all view
+    "themes": [{ "title": "Per-pod state", "text": "..." }]  // cross-cutting themes, under the home page risk table
   },
-  "defaultId": "orders-service",          // optional, service opened when no hash is given
   "allIds": ["orders-service", "..."],    // optional, picker order (may include ids not mapped yet)
   "services": [ /* Service */ ],
   "graph": {
@@ -30,13 +29,13 @@
 | `stack` | string | Optional, shown under the name in the core box. |
 | `summary` | string | One or two sentences. |
 | `core` | `{ h, lines[] }[]` | Sections inside the core box. Keep lines under about 48 characters. |
-| `inbound` | Box[] | Left column. |
-| `outbound` | Box[] | Right column. |
-| `storage` | Box[] | Row under the diagram. |
-| `tablesIn` | `[from, interface, purpose][]` | Inbound reference table. |
-| `tablesOut` | `[to, interface, purpose][]` | Outbound reference table. |
-| `jobs` | `[name, cadence, purpose][]` | Background jobs. Optional. |
-| `notes` | `[severity, category, text][]` | Risks. See `risk-review.md`. |
+| `inbound` | Box[] | Inputs: right column of the diagram. Direct callers (HTTP, webhooks, sockets). |
+| `outbound` | Box[] | Outputs: left column of the diagram. Services and APIs it calls. |
+| `storage` | Box[] | Row under the diagram: databases, caches, object stores, queues and topics. Kind `store` or `evt`. |
+| `tablesIn` | `[from, interface, purpose][]` | Inputs column of the Interfaces section. |
+| `tablesOut` | `[to, interface, purpose][]` | Outputs column of the Interfaces section. |
+| `jobs` | `[name, cadence, purpose][]` | Scheduled jobs, listed under the inputs. Optional. |
+| `notes` | `[severity, category \| category[], text][]` | Risks. See `risk-review.md`. |
 
 ## Box
 
@@ -48,7 +47,7 @@
 | `lines` | string[] | Routes, topics, tables. |
 | `link` | service id | Makes the box clickable. |
 | `opt` | boolean | Dashed: optional, env-gated or unused. |
-| `dir` | `to`, `from`, `both` | Storage only: arrow direction (default `both`). |
+| `dir` | `to`, `from`, `both` | Arrow direction relative to the service. Storage defaults to `both`; use `from` for a queue it consumes, `to` for one it publishes to or a store it only writes. Inputs and outputs default to `to` (toward the service for inputs, away from it for outputs). |
 | `feeds` | number | Storage only: index of another box in the same row this box feeds into. |
 
 ## Graph
@@ -60,4 +59,4 @@
 ## Values
 
 - Severity: `high`, `med`, `low`.
-- Category: `reliability`, `observability`, `maintainability`, `security`, `bugs`, `scalability`.
+- Category: `reliability`, `observability`, `maintainability`, `security`, `bugs`, `scalability`. A risk may list several, for example `["security", "bugs"]`.

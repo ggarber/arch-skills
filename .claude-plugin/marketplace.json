@@ -9,7 +9,7 @@
       "name": "arch-skills",
       "source": "./",
       "description": "Generate a self-contained HTML architecture map of a multi-service codebase with a verified risk review.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "category": "documentation"
     }
   ]

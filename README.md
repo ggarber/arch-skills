@@ -6,10 +6,10 @@ Agent skills for documenting and reviewing software architecture.
 
 ### `architecture-map`
 
-Generates a single, self-contained HTML page that maps every service in a codebase and reviews its risks:
+Generates a self-contained HTML file that maps every service in a codebase and reviews its risks:
 
-- **Per service:** a system-context diagram (callers and event sources, the service core, what it calls, storage), inbound and outbound interface tables, background jobs, and a risk table.
-- **All services:** a dependency ring with caller → callee edges (hover a node to highlight its traffic), risk counts by severity and service, cross-cutting themes, every high-severity issue, and the full edge list.
+- **Home page:** a diagram of every service and its dependencies, with caller → callee arrows (hover a node to highlight its traffic, click to open its page), and a risk summary table per service and level (High, Medium, Low, Total) followed by cross-cutting themes.
+- **One page per service:** a context diagram with the service in the middle, outputs on the left, inputs on the right and databases and queues below; its input and output interfaces in two columns, with scheduled jobs under the inputs; and its risks with level and categories.
 - **Risk review:** each finding is verified in committed code, cites `file:line`, and is rated by severity (High, Medium, Low) and category (Reliability, Observability, Maintainability, Security, Bugs, Scalability). The review covers in-memory state that blocks zero-downtime upgrades, removal candidates, security and auth, performance, and coupling.
 
 The agent writes one JSON data file and `scripts/build.py` validates it and renders the page from a fixed template, so maps look the same across projects and can be regenerated when the code changes. The page has no build step or server: open it in a browser, commit it to `docs/`, or publish it as a static file. It supports light and dark mode and phone widths.
